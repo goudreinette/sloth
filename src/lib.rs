@@ -2,6 +2,7 @@
 extern crate vst;
 extern crate time;
 extern crate rand;
+extern crate rand_distr;
 
 use vst::buffer::AudioBuffer;
 use vst::plugin::{Category, Info, Plugin, PluginParameters};
@@ -12,20 +13,22 @@ use vst::event::{Event, MidiEvent};
 use vst::plugin::{CanDo, HostCallback,};
 use std::sync::Arc;
 use rand::Rng;
-
+use rand_distr::{Normal, Distribution};
 
 /**
  * Parameters
  */ 
 struct SlothParameters {
-    max_delay: AtomicFloat,
+    mean_delay: AtomicFloat,
+    variance: AtomicFloat,
 }
 
 
 impl Default for SlothParameters {
     fn default() -> SlothParameters {
         SlothParameters {
-            max_delay: AtomicFloat::new(0.5),
+            mean_delay: AtomicFloat::new(20.0),
+            variance: AtomicFloat::new(5.0),
         }
     }
 }
@@ -55,14 +58,18 @@ struct Sloth {
 
 impl Sloth {
     fn add_delayed_event(&mut self, e: MidiEvent) {
-        let max_delay = self.params.max_delay.get() / 1000.0;
-        let mut rng = rand::thread_rng();
+        let mean_delay = self.params.mean_delay.get() / 1000.0;
+        let variance = self.params.variance.get() / 1000.0;
         
+        let normal = Normal::new(mean_delay as f32, variance).unwrap();
+        let v = normal.sample(&mut rand::thread_rng()) as f32;
+
+
         match e.data[0] {
             // only delay note-ons
             144 => self.delayed_events.push(DelayedMidiEvent {
                 event: e,
-                time_until_send: rng.gen_range(0.000..max_delay)
+                time_until_send: v
             }),
 
             _ => {
@@ -108,7 +115,7 @@ impl Plugin for Sloth {
             outputs: 2,
             // This `parameters` bit is important; without it, none of our
             // parameters will be shown!
-            parameters: 1,
+            parameters: 2,
             category: Category::Effect,
             ..Default::default()
         }
@@ -160,7 +167,8 @@ impl PluginParameters for SlothParameters {
     // the `get_parameter` function reads the value of a parameter.
     fn get_parameter(&self, index: i32) -> f32 {
         match index {
-            0 => self.max_delay.get(),
+            0 => self.mean_delay.get(),
+            1 => self.variance.get(),
             _ => 0.0,
         }
     }
@@ -169,7 +177,8 @@ impl PluginParameters for SlothParameters {
     fn set_parameter(&self, index: i32, val: f32) {
         #[allow(clippy::single_match)]
         match index {
-            0 => self.max_delay.set(val.max(0.0000000001)),
+            0 => self.mean_delay.set(val.max(0.0000000001)),
+            1 => self.variance.set(val.max(0.0000000001)),
             _ => (),
         }
     }
@@ -178,7 +187,8 @@ impl PluginParameters for SlothParameters {
     // format it into a string that makes the most since.
     fn get_parameter_text(&self, index: i32) -> String {
         match index {
-            0 => format!("{:.2} ms", (self.max_delay.get() * 1000.0)),
+            0 => format!("{:.2} ms", (self.mean_delay.get() * 1000.0)),
+            1 => format!("{:.2} ms", (self.variance.get() * 1000.0)),
             _ => "".to_string(),
         }
     }
@@ -186,7 +196,8 @@ impl PluginParameters for SlothParameters {
     // This shows the control's name.
     fn get_parameter_name(&self, index: i32) -> String {
         match index {
-            0 => "Max delay",
+            0 => "Mean delay",
+            1 => "Variance",
             _ => "",
         }
         .to_string()
