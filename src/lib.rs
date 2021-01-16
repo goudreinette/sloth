@@ -19,7 +19,6 @@ use rand_distr::{Normal, Distribution};
  * Parameters
  */ 
 struct SlothParameters {
-    mean_delay: AtomicFloat,
     variance: AtomicFloat,
 }
 
@@ -27,7 +26,6 @@ struct SlothParameters {
 impl Default for SlothParameters {
     fn default() -> SlothParameters {
         SlothParameters {
-            mean_delay: AtomicFloat::new(20.0),
             variance: AtomicFloat::new(5.0),
         }
     }
@@ -58,11 +56,10 @@ struct Sloth {
 
 impl Sloth {
     fn add_delayed_event(&mut self, e: MidiEvent) {
-        let mean_delay = self.params.mean_delay.get() / 1000.0;
         let variance = self.params.variance.get() / 1000.0;
         
-        let normal = Normal::new(mean_delay as f32, variance).unwrap();
-        let v = normal.sample(&mut rand::thread_rng()) as f32;
+        let normal = Normal::new(0., variance).unwrap();
+        let v = normal.sample(&mut rand::thread_rng()).abs() as f32;
 
 
         match e.data[0] {
@@ -115,7 +112,7 @@ impl Plugin for Sloth {
             outputs: 2,
             // This `parameters` bit is important; without it, none of our
             // parameters will be shown!
-            parameters: 2,
+            parameters: 1,
             category: Category::Effect,
             ..Default::default()
         }
@@ -167,8 +164,7 @@ impl PluginParameters for SlothParameters {
     // the `get_parameter` function reads the value of a parameter.
     fn get_parameter(&self, index: i32) -> f32 {
         match index {
-            0 => self.mean_delay.get(),
-            1 => self.variance.get(),
+            0 => self.variance.get(),
             _ => 0.0,
         }
     }
@@ -177,8 +173,7 @@ impl PluginParameters for SlothParameters {
     fn set_parameter(&self, index: i32, val: f32) {
         #[allow(clippy::single_match)]
         match index {
-            0 => self.mean_delay.set(val.max(0.0000000001)),
-            1 => self.variance.set(val.max(0.0000000001)),
+            0 => self.variance.set(val.max(0.0000000001)),
             _ => (),
         }
     }
@@ -187,8 +182,7 @@ impl PluginParameters for SlothParameters {
     // format it into a string that makes the most since.
     fn get_parameter_text(&self, index: i32) -> String {
         match index {
-            0 => format!("{:.2} ms", (self.mean_delay.get() * 1000.0)),
-            1 => format!("{:.2} ms", (self.variance.get() * 1000.0)),
+            0 => format!("{:.2} ms", (self.variance.get() * 1000.)),
             _ => "".to_string(),
         }
     }
@@ -196,8 +190,7 @@ impl PluginParameters for SlothParameters {
     // This shows the control's name.
     fn get_parameter_name(&self, index: i32) -> String {
         match index {
-            0 => "Mean delay",
-            1 => "Variance",
+            0  => "Variance",
             _ => "",
         }
         .to_string()
